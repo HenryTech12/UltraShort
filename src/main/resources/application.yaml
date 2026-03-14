@@ -5,7 +5,7 @@ spring:
     username: root
     password: Henry123@#$
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/ultrashort
+    url: jdbc:mysql://${db_host}:${db_port}/ultrashort
   jpa:
     hibernate:
       ddl-auto: update
@@ -15,8 +15,8 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${redis_host}
+      port: ${redis_port}
 
 resilience4j:
   circuitbreaker:
