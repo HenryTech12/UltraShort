@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: UltraShort
+  datasource:
+    username: root
+    password: Henry123@#$
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ultrashort
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      url_backend:
+        failure-rate-threshold: 50
+        permitted-number-of-calls-in-half-open-state: 5
+        register-health-indicator: true
+        minimum-number-of-calls: 10
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 100
+        wait-duration-in-open-state: 20
+  retry:
+    configs:
+      defaultConfig:
+        max-attempts: 3
+        wait-duration: 1s
+    instances:
+      url_retry:
+        base-config: defaultConfig
+  ratelimiter:
+    configs:
+      defaultConfig:
+        limit-for-period: 2
+        limit-refresh-period: 10s
+        timeout-duration: 0
+    instances:
+      url-limiter:
+        base-config: defaultConfig
+  timelimiter:
+    configs:
+      defaultConfig:
+        timeout-duration: 3
+        cancel-running-future: true
+    instances:
+      url_time_limiter:
+        base-config: defaultConfig
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "*"
