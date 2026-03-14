@@ -38,7 +38,6 @@ public class URLController {
     @Retry(name = "url_retry", fallbackMethod = "retryingBackendStart")
     @CircuitBreaker(name = "url_backend", fallbackMethod = "backendServerDown")
     @RateLimiter(name = "url-limiter", fallbackMethod = "limitRequest")
-    @TimeLimiter(name = "url_time_limiter", fallbackMethod = "timeLimit")
     public ResponseEntity<Void> callURL(@PathVariable String urlId) throws Exception {
         URL url = urlService.fetchURL(urlId);
         return ResponseEntity.status(HttpStatus.FOUND)
