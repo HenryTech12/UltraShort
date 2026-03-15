@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @Slf4j
@@ -38,10 +39,11 @@ public class URLController {
     @Retry(name = "url_retry", fallbackMethod = "retryingBackendStart")
     @CircuitBreaker(name = "url_backend", fallbackMethod = "backendServerDown")
     @RateLimiter(name = "url-limiter", fallbackMethod = "limitRequest")
-    public ResponseEntity<Void> callURL(@PathVariable String urlId) throws Exception {
+    @TimeLimiter(name = "url_time_limiter", fallbackMethod = "timeLimit")
+    public CompletableFuture<ResponseEntity<Void>> callURL(@PathVariable String urlId) throws Exception {
         URL url = urlService.fetchURL(urlId);
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(URI.create(url.getUrl())).build();
+        return CompletableFuture.supplyAsync(() -> ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(url.getUrl())).build());
     }
 
     public ResponseEntity<String> backendServerDown(Throwable t) {
