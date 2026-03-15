@@ -61,8 +61,8 @@ public class URLController {
         return ResponseEntity.status(429).body("          Too many requests....");
     }
 
-    public ResponseEntity<String> timeLimit(Throwable t) {
+    public CompletableFuture<ResponseEntity<String>> timeLimit(Throwable t) {
         log.error("requests is taking too long....");
-        return ResponseEntity.status(500).body("requests is taking too long....");
+        return CompletableFuture.supplyAsync(() -> ResponseEntity.status(500).body("requests is taking too long...."));
     }
 }
