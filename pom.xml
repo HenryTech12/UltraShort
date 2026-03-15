@@ -99,6 +99,7 @@
 	</dependencyManagement>
 
 	<build>
+		<finalName>ultrashort</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
