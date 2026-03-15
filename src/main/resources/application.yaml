@@ -2,8 +2,8 @@ spring:
   application:
     name: UltraShort
   datasource:
-    username: root
-    password: Henry123@#$
+    username: ${db_username:root}
+    password: ${db_password:Henry123@#$}
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${db_host}:${db_port}/ultrashort
   jpa:
