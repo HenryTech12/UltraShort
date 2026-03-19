@@ -16,8 +16,8 @@
 * **Database**: PostgreSQL (Relational Data)
 * **Cache**: Redis
 * **Resilience**: Resilience4j (Circuit Breaker & Rate Limiter)
-* [cite_start]**Build Tool**: Maven [cite: 29, 47]
-* [cite_start]**Documentation**: Swagger / OpenAPI [cite: 47, 69]
+* **Build Tool**: Maven
+* **Documentation**: Swagger / OpenAPI
 
 ## 🏗️ Architecture & Design Patterns
 The project is built following **Clean Architecture** principles to ensure strict separation of concerns, making the system highly testable and maintainable.
@@ -52,5 +52,8 @@ mvn spring-boot:run
 Latency Reduction: Successfully reduced data retrieval times by leveraging optimized Redis caching strategies.
 
 Reliability: Maintained system stability through simulated service failures using Resilience4j circuit breakers.
+
+Backend : https://ultrashort.onrender.com
+UI: https://ultrashort-lac.vercel.app/
 
 Developed by Fakorode Odunayo Henry
