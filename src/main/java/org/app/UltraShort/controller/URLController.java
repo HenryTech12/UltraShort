@@ -5,6 +5,7 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.app.UltraShort.exceptions.RetryException;
 import org.app.UltraShort.exceptions.ServerFailedException;
@@ -34,7 +35,7 @@ public class URLController {
     @Retry(name = "shortenUrlRetry", fallbackMethod = "retryingBackendStart")
     @CircuitBreaker(name = "shortenUrlCircuitBreaker",fallbackMethod = "backendServerDown")
     @RateLimiter(name = "shortenUrlRateLimiter",fallbackMethod = "limitRequest")
-    public ResponseEntity<URLResponse> shortenURL(@RequestBody URLRequest urlRequest, HttpServletRequest request) {
+    public ResponseEntity<URLResponse> shortenURL(@RequestBody @Valid URLRequest urlRequest, HttpServletRequest request) {
         return ResponseEntity.ok().body(urlService.createShortURL(urlRequest,request));
     }
 

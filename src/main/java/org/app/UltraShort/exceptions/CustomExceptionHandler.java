@@ -2,6 +2,7 @@ package org.app.UltraShort.exceptions;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,5 +45,15 @@ public class CustomExceptionHandler {
     @ExceptionHandler(ServerManyRequestException.class)
     public ResponseEntity<Map<String, Object>> handleRateLimiterException(ServerManyRequestException manyRequestException, HttpServletRequest request, HttpServletResponse response) {
         return buildResponse(HttpStatus.NOT_FOUND,"Too many Request !!!", "Request rejected, Too many request",request.getRequestURI());
+    }
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolationException(DataIntegrityViolationException exception, HttpServletRequest request, HttpServletResponse response) {
+        String message = "The URL provided is too long or contains invalid data.";
+
+        // We check if it's specifically a 'Data too long' error
+        if (exception.getMessage() != null && exception.getMessage().contains("Data too long")) {
+            message = "URL exceeds the maximum allowed length (2048 characters).";
+        }
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,"An error occurred", message,request.getRequestURI());
     }
 }
