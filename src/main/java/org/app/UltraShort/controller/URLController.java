@@ -6,6 +6,9 @@ import io.github.resilience4j.retry.annotation.Retry;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.app.UltraShort.exceptions.RetryException;
+import org.app.UltraShort.exceptions.ServerFailedException;
+import org.app.UltraShort.exceptions.ServerManyRequestException;
 import org.app.UltraShort.model.URL;
 import org.app.UltraShort.request.URLRequest;
 import org.app.UltraShort.response.URLResponse;
@@ -28,41 +31,38 @@ public class URLController {
     private URLService urlService;
 
     @PostMapping("/short")
-    @Retry(name = "url_retry", fallbackMethod = "retryingBackendStart")
-    @CircuitBreaker(name = "url_backend", fallbackMethod = "backendServerDown")
-    @RateLimiter(name = "url-limiter", fallbackMethod = "limitRequest")
+    @Retry(name = "shortenUrlRetry", fallbackMethod = "retryingBackendStart")
+    @CircuitBreaker(name = "shortenUrlCircuitBreaker",fallbackMethod = "backendServerDown")
+    @RateLimiter(name = "shortenUrlRateLimiter",fallbackMethod = "limitRequest")
     public ResponseEntity<URLResponse> shortenURL(@RequestBody URLRequest urlRequest, HttpServletRequest request) {
-        return ResponseEntity.ok().body(urlService.generateShortURL(urlRequest,request));
+        return ResponseEntity.ok().body(urlService.createShortURL(urlRequest,request));
     }
 
     @GetMapping("/{urlId}")
-    @Retry(name = "url_retry", fallbackMethod = "retryingBackendStart")
-    @CircuitBreaker(name = "url_backend", fallbackMethod = "backendServerDown")
-    @RateLimiter(name = "url-limiter", fallbackMethod = "limitRequest")
-    @TimeLimiter(name = "url_time_limiter", fallbackMethod = "timeLimit")
     public CompletableFuture<ResponseEntity<Void>> callURL(@PathVariable String urlId) throws Exception {
-        URL url = urlService.fetchURL(urlId);
         return CompletableFuture.supplyAsync(() -> ResponseEntity.status(HttpStatus.FOUND)
-                .location(URI.create(url.getUrl())).build());
+                .location(URI.create(urlService.fetchURL(urlId).getUrl())).build());
     }
 
-    public ResponseEntity<String> backendServerDown(Throwable t) {
-        return ResponseEntity.status(500).body("Backend Server is failing, Circuit Breaker in action.");
-    }
-
-
-    public ResponseEntity<String> retryingBackendStart(Throwable t) {
-        return ResponseEntity.status(500).body("Backend Server is starting back again, Retry in action.");
+    public ResponseEntity<URLResponse> backendServerDown(Throwable t) {
+        log.error("Backend failure : {}", t.getMessage());
+        throw new ServerFailedException();
     }
 
 
-    public ResponseEntity<String> limitRequest(Throwable t) {
-        log.error("Too many requests....");
-        return ResponseEntity.status(429).body("          Too many requests....");
+    public ResponseEntity<URLResponse> retryingBackendStart(Throwable t) {
+        log.error("retry exhausted: {}", t.getMessage());
+        throw new RetryException();
     }
 
-    public CompletableFuture<ResponseEntity<String>> timeLimit(Throwable t) {
-        log.error("requests is taking too long....");
-        return CompletableFuture.supplyAsync(() -> ResponseEntity.status(500).body("requests is taking too long...."));
+
+    public ResponseEntity<URLResponse> limitRequest(Throwable t) {
+        log.error("Rate limit hit for IP: {}","127.0.0.1");
+        throw new ServerManyRequestException();
+    }
+
+    @GetMapping("/ping")
+    public ResponseEntity<String> ping() {
+        return ResponseEntity.ok().body("Request successful....");
     }
 }

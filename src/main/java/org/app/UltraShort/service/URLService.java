@@ -1,54 +1,62 @@
 package org.app.UltraShort.service;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.app.UltraShort.exceptions.URLNotFoundException;
 import org.app.UltraShort.model.URL;
 import org.app.UltraShort.repository.URLRepository;
 import org.app.UltraShort.request.URLRequest;
 import org.app.UltraShort.response.URLResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Base64;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.Duration;
+import java.util.*;
 
+@Slf4j
 @Service
 public class URLService {
 
     @Autowired
     private URLRepository urlRepository;
 
-    public String generateURLID(String url) {
+    @Autowired
+    private RedisTemplate<String, URL> redisTemplate;
 
-        String urlID = generateBase64(UUID.randomUUID().toString());
 
-        // If collision, keep generating a NEW one, don't shorten it
-        while (urlRepository.findByUrlID(urlID).isPresent()) {
-            urlID = generateBase64(UUID.randomUUID().toString());
-        }
-        return urlID;
-    }
-
-    public String generateBase64(String urlId) {
-        return Base64.getUrlEncoder().encodeToString(urlId.getBytes())
-                .substring(0,7);
-    }
-
-    public URLResponse generateShortURL(URLRequest urlRequest, HttpServletRequest request) {
+    public URLResponse createShortURL(URLRequest urlRequest, HttpServletRequest request) {
         URL url = new URL();
         url.setUrl(urlRequest.url());
+        String urlID = HashService.generateHash(urlRequest.url());
 
-        String urlID = generateURLID(urlRequest.url());
-        System.out.println("URL ID: 1".concat(urlID));
-        url.setUrlID(urlID);
+        try {
 
-        String shortUrl = generateApplicationURL(request) +"/"+ urlID;
-        url.setShortUrl(shortUrl);
+            if (urlRepository.findByUrlID(urlID).isPresent()) {
+                urlID = HashService.generateHash(urlRequest.url().
+                        concat(String.valueOf(System.currentTimeMillis())));
+            }
+            url.setUrlID(urlID);
+            url.setShortUrl(generateShortURL(request, urlID));
+            url.setUrl(urlRequest.url());
+            urlRepository.save(url);
 
-        urlRepository.save(url);
-        return new URLResponse(shortUrl, urlID);
+        }
+        catch(DataIntegrityViolationException e) {
+            urlID = HashService.generateHash(urlRequest.url().
+                    concat(String.valueOf(System.currentTimeMillis())));
+            url.setUrlID(urlID);
+            url.setShortUrl(generateShortURL(request,urlID));
+            url.setUrl(urlRequest.url());
+            urlRepository.save(url);
+        }
+        //save to redis for fast check
+        long ttl = new Random().nextInt(10) + 60;
+        redisTemplate.opsForValue().
+                set(urlID, url,Duration.ofSeconds(ttl));
+       return new URLResponse(url.getShortUrl(), urlID);
     }
 
     public String generateApplicationURL(HttpServletRequest request) {
@@ -56,13 +64,33 @@ public class URLService {
         return url.replace(request.getRequestURI(), "");
     }
 
+    private String generateShortURL(HttpServletRequest request, String urlID) {
+        return generateApplicationURL(request) +"/"+ urlID;
+    }
 
-    @Cacheable(key = "#urlID" , value = "URL")
+
     public URL fetchURL(String urlID) {
-        System.out.println("Time of Initiation: "+System.currentTimeMillis());
-        Optional<URL> url = urlRepository
-                .findByUrlID(urlID);
-        System.out.println("Time of Result: "+System.currentTimeMillis());
-        return url.orElse(null);
+        URL url = redisTemplate.opsForValue().get(urlID);
+        if(url != null) {
+            log.info("Cache hit for URL ID {}, returning from Redis", urlID);
+            return url;
+        } else {
+            log.info("Cache miss for URL ID {}, fetching from database", urlID);
+            System.out.println("Time of Initiation: "+System.currentTimeMillis());
+
+            url = urlRepository
+                    .findByUrlID(urlID).orElseThrow(() -> new URLNotFoundException("URL not found"));
+            long ttl = new Random().nextInt(10) + 60;
+            Boolean redisOutput = redisTemplate.opsForValue().setIfAbsent(urlID, url, Duration.ofSeconds(ttl));
+            System.out.println("Time of Result: " + System.currentTimeMillis());
+
+            if(redisOutput) {
+                log.info("URL with ID {} cached in Redis for {} seconds", urlID, ttl);
+            }
+            else {
+                log.info("URL with ID {} already exists in Redis, skipping cache", urlID);
+            }
+        }
+       return url;
     }
 }
