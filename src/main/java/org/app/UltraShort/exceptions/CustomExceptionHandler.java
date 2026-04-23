@@ -54,6 +54,6 @@ public class CustomExceptionHandler {
         if (exception.getMessage() != null && exception.getMessage().contains("Data too long")) {
             message = "URL exceeds the maximum allowed length (2048 characters).";
         }
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,"An error occurred", message,request.getRequestURI());
+        return buildResponse(HttpStatus.BAD_REQUEST ,"An error occurred", message,request.getRequestURI());
     }
 }
