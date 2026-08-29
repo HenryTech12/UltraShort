@@ -12,6 +12,7 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -114,18 +115,13 @@ class URLApiIntegrationTest {
     }
 
     @Test
-    void shortenUrl_sameUrlSubmittedTwice_documentsCurrentBehavior() {
-        // NOTE: this documents a real product bug found while writing this
-        // suite (see PR description / feedback for the full write-up).
+    void shortenUrl_sameUrlSubmittedTwice_failsFastWithoutBurningRetries() {
         // The `url` column is unique, and createShortURL() only re-derives
-        // a new short id on collision, not a fresh save target. Resubmitting
-        // the exact same long URL fails to save every single retry attempt
-        // with the same DataIntegrityViolationException, so instead of a
-        // clean 400 "duplicate URL" response, @Retry burns through all 4
-        // attempts, retryOnException's registry (which is misconfigured -
-        // see ResilienceConfigTest / feedback) treats it as retryable, and
-        // the request ultimately fails with a misleading 500 "retry
-        // mechanism failed" instead of ever surfacing the real cause.
+        // a new short id on collision, not a fresh save target, so
+        // resubmitting the exact same long URL can never succeed. Retry is
+        // now configured to not retry DataIntegrityViolationException, so
+        // this fails on the first attempt with a clean 400 instead of
+        // burning all 4 retry attempts and returning a misleading 500.
         String longUrl = "https://www.example.com/resubmitted-url";
 
         ResponseEntity<URLResponse> first = restTemplate.postForEntity(
@@ -135,7 +131,52 @@ class URLApiIntegrationTest {
         ResponseEntity<Map> second = restTemplate.postForEntity(
                 baseUrl() + "/short", new URLRequest(longUrl), Map.class);
 
-        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(second.getBody()).containsEntry("error", "Retry failed!!!");
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    // This test deliberately saturates the shared rate limiter / circuit
+    // breaker singletons; force a fresh Spring context afterwards so it
+    // doesn't leak throttled state into whichever test method runs next.
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    void shortenUrl_concurrentLegitimateRequests_areThrottledNotFailed() throws InterruptedException {
+        // Regression test for the retry-storm bug: previously, retrying
+        // straight back into an already-exhausted rate limiter meant a
+        // burst of concurrent, perfectly valid requests mostly failed with
+        // misleading 500s. Now that Retry/CircuitBreaker only convert the
+        // exception they actually own and let everything else through
+        // untouched, 10 concurrent requests against a rate limiter tuned to
+        // 3 permits/2s legitimately throttles some of them - but as a clean,
+        // correctly-classified 429, never a 500.
+        int threadCount = 10;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.List<Integer> statuses = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            int idx = i;
+            pool.submit(() -> {
+                try {
+                    ResponseEntity<URLResponse> response = restTemplate.postForEntity(baseUrl() + "/short",
+                            new URLRequest("https://www.example.com/concurrent-" + idx + "-" + System.nanoTime()),
+                            URLResponse.class);
+                    statuses.add(response.getStatusCode().value());
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        latch.await();
+        pool.shutdown();
+
+        assertThat(statuses).hasSize(threadCount);
+        // Never a 500: every request is either served or cleanly throttled.
+        assertThat(statuses).allMatch(status -> status == HttpStatus.OK.value()
+                || status == HttpStatus.TOO_MANY_REQUESTS.value());
+        // The majority of legitimate concurrent traffic still gets through -
+        // 3 permits/2s with a 5s timeout can't fully drain 10 truly
+        // concurrent callers, so some throttling here is expected, not a bug.
+        long succeeded = statuses.stream().filter(status -> status == HttpStatus.OK.value()).count();
+        assertThat(succeeded).isGreaterThanOrEqualTo(threadCount / 2);
     }
 }

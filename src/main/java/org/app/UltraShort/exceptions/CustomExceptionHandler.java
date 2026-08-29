@@ -3,6 +3,7 @@ package org.app.UltraShort.exceptions;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,7 +45,7 @@ public class CustomExceptionHandler {
 
     @ExceptionHandler(ServerManyRequestException.class)
     public ResponseEntity<Map<String, Object>> handleRateLimiterException(ServerManyRequestException manyRequestException, HttpServletRequest request, HttpServletResponse response) {
-        return buildResponse(HttpStatus.NOT_FOUND,"Too many Request !!!", "Request rejected, Too many request",request.getRequestURI());
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS,"Too Many Requests", "Request rejected, too many requests",request.getRequestURI());
     }
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, Object>> handleDataIntegrityViolationException(DataIntegrityViolationException exception, HttpServletRequest request, HttpServletResponse response) {
@@ -55,5 +56,13 @@ public class CustomExceptionHandler {
             message = "URL exceeds the maximum allowed length (2048 characters).";
         }
         return buildResponse(HttpStatus.BAD_REQUEST ,"An error occurred", message,request.getRequestURI());
+    }
+
+    // Under some JDBC drivers/insert paths, a duplicate-key write can surface
+    // as an optimistic-locking failure instead of DataIntegrityViolationException.
+    // Either way it means the same thing here: this URL is already shortened.
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleOptimisticLockingFailureException(OptimisticLockingFailureException exception, HttpServletRequest request, HttpServletResponse response) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "An error occurred", "The URL provided is too long or contains invalid data.", request.getRequestURI());
     }
 }
