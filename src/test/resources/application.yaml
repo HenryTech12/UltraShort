@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: UltraShort
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:ultrashort;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  data:
+    redis:
+      host: ${redis_host:localhost}
+      port: ${redis_port:6379}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "*"
